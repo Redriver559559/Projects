@@ -4,8 +4,6 @@ import aioconsole
 import json
 from rich import print
 
-#This is currently still a work in progress, more will be added soon.
-
 class Client():
     """Client class for handling information about the host, port, username, and if it is connected"""
     def __init__(self, host, port):
@@ -18,15 +16,16 @@ class Client():
 
     #trys to connect to server until succesful
     async def connect(self):
+        """Attempts to connect to the server / host until it is accepted. Using connect_ex to prevent exceptions"""
         while self.connected == False:
             print('Connecting...')
             try:
                 self.reader, self.writer = await asyncio.open_connection('localhost', 9090)
+                print(f"Connected to {self.writer.get_extra_info('peername')}\n")
+                await self.login()
                 self.connected = True
             except ConnectionRefusedError:
-                pass
-        print(f"Connected to {self.writer.get_extra_info('peername')}\n")
-        await self.login()
+                continue
         
     async def login(self):
         """Takes in the users login and saves the username, the password is just input and is not stored anywhere"""
@@ -63,20 +62,18 @@ class Client():
             try:
                 data = (await self.reader.readuntil(b'}'))
                 message_data = json.loads(data)
+                message = await self.format_message(message_data)
+                print(message)
             except ConnectionResetError:
                 print("Connection Disconnected...")
-                self.connected = False
-                await self.connect()
-
-            message = await self.format_message(message_data)
-            print(message)
+                return
 
     async def receive_input(self):
         """Sends the message to the server / host machine."""
-        while True:
+        while self.connected:
             message = (await aioconsole.ainput())
-            if len(message) > 20000:
-                print('Too Long!')
+            if len(message) > 200:
+                print('Message Too Long!')
             else:
                 await self.send_message(message)
     
@@ -84,8 +81,10 @@ class Client():
         await self.connect()
         recieve_message = asyncio.create_task(client.recv_message())
         send_message = asyncio.create_task(client.receive_input())
-
         await asyncio.gather(recieve_message, send_message)
 
 client = Client('127.0.0.1', 8888)
-asyncio.run(client.run_client())
+try:
+    asyncio.run(client.run_client())
+except:
+    print('Connection Closed')
