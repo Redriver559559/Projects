@@ -4,7 +4,7 @@
   <ul>
     <li>Currently doing random projects involving simulations and networking.</li>
     <li>Exploring AI, and cellualr autonoma.</li>
-    <li>In my free time, I like to learn and challenge myself in math and algorithms.</li>
+    <li>In my free time when I;m not busy doing programming or any other work, I like to learn and challenge myself with math and algorithms.</li>
   </ul>
 </p>
 
