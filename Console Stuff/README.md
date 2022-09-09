@@ -5,3 +5,8 @@
 
 
 ---
+<h1>Image to ASCII</h1>
+
+<img src="https://user-images.githubusercontent.com/69123362/189284092-182666f9-2a53-430a-921e-f7e9dcf25c64.png" width="500">
+
+<img src="https://user-images.githubusercontent.com/69123362/189284570-9f955e34-b442-4bb0-8781-e9bc2ebd27b6.png" width="500">
