@@ -13,6 +13,13 @@ class Client():
         self.writer = None
         self.reader = None
         self.connected = False
+        self.logged_in = False
+
+    async def leave(self):
+        self.connected = False
+        if not self.writer.is_closing():
+            self.writer.close()
+            await self.writer.wait_closed()
 
     #trys to connect to server until succesful
     async def connect(self):
@@ -22,18 +29,24 @@ class Client():
             try:
                 self.reader, self.writer = await asyncio.open_connection('localhost', 9090)
                 print(f"Connected to {self.writer.get_extra_info('peername')}\n")
-                await self.login()
                 self.connected = True
             except ConnectionRefusedError:
                 continue
         
     async def login(self):
         """Takes in the users login and saves the username, the password is just input and is not stored anywhere"""
-        self.username = input('Username: ')
-        password = input('Password: ')
-        data = json.dumps({'username':self.username, 'password':password}).encode()
-        self.writer.write(data)
-        await self.writer.drain()
+        while self.logged_in == False:
+            data = await self.receive_data()
+            if data['message'] == 'LOGIN':
+                self.username = input('Username: ')
+                password = input('Password: ')
+                data = (json.dumps({'username':self.username, 'password':password})+'\n').encode()
+                self.writer.write(data)
+                await self.writer.drain()
+            elif data['message'] == 'LOGGED IN':
+                self.logged_in = True
+                return
+
     
     @staticmethod
     async def get_time():
@@ -42,7 +55,7 @@ class Client():
         return (time.strftime("%m/%d/%Y %#I:%M %p"))
     
     async def send_message(self, message):
-        data = json.dumps({'message':message}).encode()
+        data = (json.dumps({'message':message})+'\n').encode()
         self.writer.write(data)
         await self.writer.drain()
 
@@ -56,35 +69,42 @@ class Client():
         else:
             return(f"[red]{sender} : [white]{message} [grey37]{await self.get_time()}")
 
-    async def recv_message(self):
+    async def receive_data(self):
+        data = (await self.reader.readuntil(b'\n')).decode()
+        data = json.loads(data)
+        return data
+
+    async def client_handler(self):
         """Recieves messages from the server and checks the message data for usernames. Basic coloring for other names and the server messages"""
-        while True:
-            try:
-                data = (await self.reader.readuntil(b'}'))
-                message_data = json.loads(data)
-                message = await self.format_message(message_data)
-                print(message)
-            except ConnectionResetError:
-                print("Connection Disconnected...")
-                return
+        while self.logged_in:
+            data = await self.receive_data()
+
+            message = await self.format_message(data)
+            print(message)
 
     async def receive_input(self):
         """Sends the message to the server / host machine."""
-        while self.connected:
+        while self.logged_in:
             message = (await aioconsole.ainput())
-            if len(message) > 200:
+            if message == 'spam':
+                message = ('spam'*17001)
+
+            if len(message) > 2000000: #change this cap if you would like, serverside will send this info on first connection eventually
                 print('Message Too Long!')
             else:
-                await self.send_message(message)
+                try:
+                    await self.send_message(message)
+                except ConnectionResetError:
+                    if self.connected:
+                        await self.leave()
+                    return
     
     async def run_client(self):
         await self.connect()
-        recieve_message = asyncio.create_task(client.recv_message())
+        await self.login()
+        recieve_message = asyncio.create_task(client.client_handler())
         send_message = asyncio.create_task(client.receive_input())
         await asyncio.gather(recieve_message, send_message)
 
-client = Client('127.0.0.1', 8888)
-try:
-    asyncio.run(client.run_client())
-except:
-    print('Connection Closed')
+client = Client('localhost', 9090)
+asyncio.run(client.run_client())
