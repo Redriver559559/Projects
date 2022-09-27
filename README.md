@@ -1,10 +1,9 @@
 <h1>About Me :</h1>
 <p>
-  I am a self taught programmer from Colorado. I originally started programming in 2019 with python as my first language. Over the years I have taught myself some very useful tools, and languages that have helped me finish and create projects. I am most profient in Python out of all the languages I know, while still learning Java and other tools I like to study math and algorithms on my free time. I'm very pationate about learning networking and math, though my goals are changing I am also very interested in AI and computer vision.
+  I am a self taught programmer from Colorado. I originally started programming in 2019 with python as my first language. Over the years I have taught myself some very useful tools, and languages that have helped me finish and create projects. I am most profient in Python out of all the languages I know, while still learning Java and other tools I like to study math and algorithms in my free time. I'm very pationate about learning networking and other topics, though my goals are changing constantly, I am also very interested in AI, computer vision, math, and a large range of other topics that I find interesting.
   <ul>
     <li>Currently doing random projects involving simulations and networking.</li>
     <li>Exploring AI, and cellualr autonoma.</li>
-    <li>In my free time when I;m not busy doing programming or any other work, I like to learn and challenge myself with math and algorithms.</li>
   </ul>
 </p>
 
