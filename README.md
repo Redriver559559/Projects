@@ -24,7 +24,7 @@
 
 ---
 
-<h1>Favorite Project Topics</h1>
+<h1>Favorite Topics</h1>
 <ul>
   <li>Networking</li>
   <li>Cellular Autonoma</li>
