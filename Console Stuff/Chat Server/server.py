@@ -2,64 +2,45 @@ import asyncio
 import json
 import inspect
 
-#adress information
-host, port = ('127.0.0.1', 9090)
+host, port = ('localhost', 9090)
 clients = dict()
 banned_users = set()
-
+message_history =  []
+message_size = 200
+username_len = 10
 class Client:
     """Client class for storing client information such as task, username and more"""
     def __init__(self, reader, writer, task):
         self.reader = reader
         self.writer = writer
         self.task = task
+        self.logged_in = False
         self.username = None
 
 class Commands:
     prefix = '//'
     commands = {}
-    def command(name):
+    def command(name : str, permission=1):
         def wrapper(command):
-            Commands.commands[name] = command
+            Commands.commands[name] = [command, permission]
             return command
         return wrapper
+    
+    @staticmethod
+    async def check_command(client, message):
+        """Checks if the command usage is valid and if it is an actual command"""
+        message = message.removeprefix(Commands.prefix).split() #removes the command prefix from the message
+        command_name = message[0]
+        paramters = message[1:len(message)] #everything above the command name is a parameter
+        if command_name in Commands.commands:
+            command = Commands.commands[command_name][0] #grabs the command function from the commands dict
+            command_data = inspect.getfullargspec(command) #gets a argspec (argument details) for that function
+            if (command_data.varargs) is not None:
+                await command(client, *paramters, command=True)
+            else:
+                await command(client)
 
-@Commands.command('users')
-async def users_online():
-    user_list = [x for x in clients.keys()]
-    await server_broadcast('Server', f'Users online: {user_list}')
-
-async def broadcast(client, data):
-    format = {'sender':client.username, 'message':data, 'message_type':'public'}
-    data = json.dumps(format).encode()
-    for client in clients.values():
-        await send_data(client, data)
-
-@Commands.command('broadcast')
-async def server_broadcast(client, data):
-    data = ''.join(data)
-    format = {'sender':'Server', 'message':data, 'message_type':'public'}
-    data = json.dumps(format).encode()
-    for client in clients.values():
-        await send_data(client, data)
-
-@Commands.command('message')
-async def message(client, data):
-    target_username = data[0]
-    if target_username in clients:
-        target_client = clients[target_username]
-        data = ' '.join(data)
-    format = {'sender':client.username, 'message':data, 'message_type':'private'}
-    data = json.dumps(format).encode()
-    await send_data(client, data)
-    await send_data(target_client, data)
-
-async def server_message(client, data):
-    format = {'sender':'Server', 'message':data, 'message_type':'public'}
-    data = json.dumps(format).encode()
-    await send_data(client, data)
-
-async def user_leave(client):
+async def user_leave(client : Client):
         client.task.cancel()
         if client.username != None:
             del clients[client.username]
@@ -68,73 +49,149 @@ async def user_leave(client):
             await client.writer.wait_closed()
 
 async def send_data(client, data):
+    if isinstance(data, dict):
+        data = (json.dumps(data)+'\n')
+    data = data.encode()
     client.writer.write(data)
     await client.writer.drain()
 
-#recieives data from the client, loads the data as a json.
-async def receive_data(client): 
-    try:
-        data = await client.reader.readuntil(b'}')
-        return json.loads(data)
-    except ConnectionResetError:
-        await client.user_leave()
+@Commands.command('broadcast', 5)
+async def broadcast(client, *data, command=False):
+    """broadcasts the message to all users, command and server side version"""
+    data = ' '.join(data)
+    format = {'sender':client.username, 'message':data, 'message_type':'public'}
+    if command:
+        format['sender'] = 'Server'
 
-async def check_command(client, data):
-    command_name, *arguments = data.split()
-    command_name = command_name[len(Commands.prefix):]
-    if command_name in Commands.commands:
-        command = Commands.commands[command_name]
-        if len(arguments) == 0:
-            try:
-                await command()
-            except TypeError:
-                await server_message(client, f'The command "{command_name}" requires 1 or more parameters.')
-                args = inspect.signature(command)
-                print(args.parameters)
-        elif len(arguments) > 0:
-            try:
-                await command(client, arguments)
+    message_history.append(json.dumps(format)+'\n')
 
-            except TypeError:
-                await server_message(client, f'The command "{command_name}" requires no parameters')
+    for client in clients.values():
+        await send_data(client, format)
+
+@Commands.command('message', 1)
+async def send_message(client, *data, command=False, message_type='private'):
+    """Sends a 'private' message to the specified client / username"""
+    format = {'sender':'Server', 'message':data, 'message_type':message_type}
+    if command:
+        target_username = data[0]
+        if target_username in clients:
+            target_client = clients[target_username]
+            format['sender'] = client.username
+            data = data[1:len(data)]
+
+    data = ' '.join(data)
+    format['message'] = data
+
+    await send_data(client, format)
+    if command:
+        await send_data(target_client, format)
+
+@Commands.command('users', 5)
+async def users_online(client):
+    """Sends a list of all online users"""
+    user_list = [x for x in clients.keys()]
+    await send_message(client, f'Users online: {user_list}')
+
+@Commands.command('banned-users', 5)
+async def users_online(client):
+    """Sends a list of all banned users"""
+    user_list = [x for x in banned_users]
+    await send_message(client, f'Banned users: {user_list}')
+
+@Commands.command('ban', 1)
+async def ban_user(client, *data, command=False):
+    format = {'sender':'Server', 'message':'You have been banned!', 'message_type':'private'}
+    if command:
+        target_username = data[0]
+        if target_username in clients:
+            target_client = clients[target_username]
+            data = data[1:len(data)]
     else:
-        await broadcast(client, data)
-        
-async def check_message(client, message):
-    if message.startswith(Commands.prefix):
-        await check_command(client, message)
-    else:
-        await broadcast(client, message)
-        
-#main client handler that cheks messages and broadcasts them
+        target_username = client.username
+        target_client = client
+
+    if len(data) >= 1:
+        data = ' '.join(data)
+        format['message'] = f'You have been banned for: {data}'
+
+    await send_data(target_client, format)
+
+    banned_users.add(target_username)
+    await user_leave(target_client)
+
+async def send_history(client):
+    if len(message_history) > 0:
+        history = "".join(message_history)
+        await send_data(client, history)
+
+async def receive_data(client : Client): 
+    try: 
+        data = (await client.reader.readuntil(b'\n')).decode()
+        data = json.loads(data)
+    except (json.JSONDecodeError, KeyError, ConnectionResetError, asyncio.LimitOverrunError) as e:
+        if isinstance(e, asyncio.LimitOverrunError):
+            print(dir(client.reader))
+            await send_message(client, 'Congratulations! You have reached the servers buffer limit! ')
+            #print(client.reader.feed_data) how do I clear the buffer.....why is this not documented
+            #print(client.reader.at_eof())
+            return
+        await user_leave(client)
+        return
+    return data
+
 async def handle_client(client):
     while True:
         data = await receive_data(client)
-        message = data['message']
-        if message == None:
+        try:
+            message = data['message']
+        except KeyError:
+            await send_message(client, 'The message sent, is not in the correct format!')
+            continue
+        if data == None:
             return
-        await check_message(client, message)
+        if len(message) > message_size:
+            await send_message(client, 'Message exceeds the 200 char size limit.')
+            continue
+        elif len(message) == 0:
+            continue
 
-#checks user identity and validates them
-async def login(client):
-    login_data = await receive_data(client)
-    username = login_data['username']
-    if username in banned_users:
-        await user_leave(client)
+        if message.startswith(Commands.prefix):
+            await Commands.check_command(client, message)
+        else:
+            await broadcast(client, message)
+
+async def login(client : Client):
+    format = {'sender':'Server', 'message':'LOGIN', 'message_type':'INFO'} #These will end up being changed to something better
+    while client.logged_in == False:
+        await send_data(client, format)
+        login_data = await receive_data(client)
+        username = login_data['username']
+
+        if len(username) > username_len:
+            await send_message(client, 'Username too long!')
+            continue
+
+        if username in banned_users:
+            await send_message(client, 'You are banned!')
+            await user_leave(client)
+
+        await send_message(client, 'LOGGED IN')
+        client.logged_in = True
+
     client.username = username
     clients[client.username] = client
+    await send_message(client, 'Logged in!')
 
-#creates a client when a user connects and starts login and the client proccesses 
 async def client_connected(reader, writer):
     task = asyncio.current_task(loop=None)
     client = Client(reader, writer, task)
     await login(client)
-    await server_message(client, 'Logged in!')
+    await send_history(client)
     await handle_client(client)
 
-#just listens for connections and makes courotines when they connect
 async def run_server():
     server = await asyncio.start_server(client_connected, host, port)
+
     print('Server started!')
     async with server:
         await server.serve_forever()
