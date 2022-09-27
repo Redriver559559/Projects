@@ -1,5 +1,6 @@
 <h1>Chat Server</h1>
 <p>This chat server project is something I have been working on for quite some time. I have quite a big goal for it and I am always updating it. It is currently in a working state and supports Commands, easy intergration and much more. I plan on adding SSL / TLS, Encryption, and maybe even just flat out making an API in the future as well as Data Base support and much more. I've tried and keep it as simple as I can while also having good performance and easy to read code.</p>
+There are some major changes coming soon such as a new messaging format and much more. This is currently using JSON to send messages so I can add more data headers and what not if I need to. I will be adding response codes and something similiar to HTTP's just for ease of access. This project could be built with websockets, but I choose not to as a learning experiance.
 
 ![image](https://user-images.githubusercontent.com/69123362/189283562-977a3631-1557-488a-b1ff-d0483f784534.png)
 
